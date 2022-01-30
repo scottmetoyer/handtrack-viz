@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <meta name="author" content="">
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Include Handsfree.js -->
+  <link rel="stylesheet" href="https://unpkg.com/handsfree@8.4.2/build/lib/assets/handsfree.css" />
+  <script>var exports = {};</script>
+  <script src="https://unpkg.com/handsfree@8.4.2/build/lib/handsfree.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/webmidi@next/dist/iife/webmidi.iife.js"></script>
+  <!--script src="https://cdn.jsdelivr.net/npm/webmidi"></script-->
+
+  <link href="css/style.css" rel="stylesheet">
+</head>
+
+<body>
+  <video id="video" autoplay class="grayscale"></video>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    var canvas = document.getElementById('canvas');
+    var context = canvas.getContext('2d');
+    var width = screen.width;
+    var height = screen.height;
+    var visible = false;
+    var midiEnabled = false;
+    var midiOutput;
+    var midiInput;
+
+    var leftVisible = false;
+    var rightVisible = false;
+    var faceVisible = false;
+
+    var leftLandmarkData = [];
+    var rightLandmarkData = [];
+    var faceLandmarkData = [];
+
+    var leftEndpoints = [];
+    var rightEndpoints = [];
+    var faceEndpoints = [];
+
+    // Control change values
+    var controlChangeMessages = [];
+
+    // Helper map function to constain input values to valid MIDI CC ranges
+    Number.prototype.map = function (in_min, in_max, out_min, out_max) {
+      var value = this;
+      if (this < in_min) {
+        value = in_min;
+      }
+      if (this > in_max) {
+        value = in_max;
+      }
+      return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+    }
+
+    const handsfree = new Handsfree({
+      hands: {
+        enabled: true,
+        maxNumHands: 2,
+
+        // Minimum confidence [0 - 1] for a hand to be considered detected
+        minDetectionConfidence: 0.8,
+
+        // Minimum confidence [0 - 1] for the landmark tracker to be considered detected
+        // Higher values are more robust at the expense of higher latency
+        minTrackingConfidence: 0.5
+      }
+      /*,
+      facemesh: {
+        enabled: true,
+        maxNumFaces: 1,
+
+        // Minimum confidence [0 - 1] for a face to be considered detected
+        minDetectionConfidence: 0.5,
+
+        // Minimum confidence [0 - 1] for the landmark tracker to be considered detected
+        // Higher values are more robust at the expense of higher latency
+        minTrackingConfidence: 0.5
+      }*/
+    });
+    handsfree.start();
+
+    function startVideo() {
+      var video = document.querySelector("#video");
+
+      if (navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({
+            video: true
+          })
+          .then(function (stream) {
+            console.log("Starting video stream...")
+            video.srcObject = stream;
+          })
+          .catch(function (err) {
+            console.log("Something went wrong!");
+          });
+      }
+    }
+
+    function randomizeEndpoints(numberOfValues, min, max) {
+      var endpoints = [];
+
+      for (var i = 0; i < numberOfValues; i++) {
+        var top = max - min;
+        endpoints.push(Math.floor(Math.random() * top) + min);
+      }
+
+      return endpoints;
+    }
+
+    WebMidi.enable(function (err) {
+      if (err) {
+        console.log("WebMidi could not be enabled.", err);
+      }
+
+      // Enumerate outputs
+      console.log(WebMidi.outputs);
+
+      // var output = WebMidi.getOutputById("123456789");
+      // var output = WebMidi.getOutputByName("CV-8");
+      midiOutput = WebMidi.getOutputByName("IAC Driver Bus 1");
+
+      midiEnabled = true;
+      console.log("Midi activated")
+    });
+
+    document.body.onkeyup = function (e) {
+      console.log("Starting video");
+
+      if (e.keyCode == 32) {
+        startVideo();
+      }
+    }
+
+    document.addEventListener('handsfree-data', event => {
+      var data = event.detail;
+
+      if (!data.hands) return
+
+      if (data.hands) {
+        // Show a log whenever the right hand for person #2 is visible
+        if (data.hands.landmarksVisible[0]) {
+          leftVisible = true;
+          leftLandmarkData = data.hands.landmarks[0];
+        } else {
+          leftVisible = false;
+          leftLandmarkData = [];
+        }
+
+        if (data.hands.landmarksVisible[1]) {
+          rightVisible = true;
+          rightLandmarkData = data.hands.landmarks[1];
+          // console.log(data.hands.landmarks[0])
+        } else {
+          rightVisible = false;
+          rightLandmarkData = [];
+        }
+      }
+
+      /*
+      if (data.facemesh && data.facemesh.multiFaceLandmarks) {
+        faceVisible = true;
+        faceLandmarkData = data.facemesh.multiFaceLandmarks[0];
+      } else {
+        faceVisible = false;
+      }
+      */
+    })
+
+    function init() {
+      //canvas.style.width = width + "px";
+      //canvas.style.height = height + "px";
+      var scale = window.devicePixelRatio;
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+
+      // Normalize coordinate system to use css pixels.
+      context.scale(scale, scale);
+
+      leftEndpoints = randomizeEndpoints(22, 0, width / 2);
+      rightEndpoints = randomizeEndpoints(22, width / 2, width);
+
+      for (var i = 0; i < 12; i++) {
+        controlChangeMessages[i] = 0;
+      }
+    }
+
+    function sendControlChange(controlNumber, rawValue, min, max) {
+      var newValue = Math.round(rawValue.map(min, max, 0, 127));
+
+      if (controlChangeMessages[controlNumber] != newValue) {
+        controlChangeMessages[controlNumber] = newValue;
+
+        if (midiEnabled == true) {
+          midiOutput.sendControlChange(controlNumber, newValue, 1);
+        }
+      }
+    }
+
+    function drawHandArray(points) {
+      for (var i = 0; i < points.length; i++) {
+        x = width - (points[i].x * width);
+        y = points[i].y * height;
+
+        context.beginPath();
+        context.arc(x, y, 4, 0, 2 * Math.PI, false);
+        context.fill();
+        context.stroke();
+      }
+    }
+
+    function drawFaceArray(points) {
+      for (var i = 0; i < points.length; i++) {
+        x = width - (points[i].x * width);
+        y = points[i].y * height;
+
+        context.beginPath();
+        context.arc(x, y, 1, 0, 2 * Math.PI, false);
+        context.fill();
+        context.stroke();
+      }
+    }
+
+    function drawLines(startPoints, endPoints) {
+      for (var i = 0; i < startPoints.length; i++) {
+        context.beginPath();
+        x = width - (startPoints[i].x * width);
+        y = startPoints[i].y * height;
+
+        context.moveTo(x, y);
+        context.lineTo(endPoints[i], height);
+        // context.lineWidth = 2.5;
+        context.stroke();
+      }
+    }
+
+    function draw() {
+      context.clearRect(0, 0, width, height);
+      context.fillStyle = "yellow";
+      context.strokeStyle = "yellow";
+
+      // if (!data.hands) return;
+      if (leftVisible) {
+        drawHandArray(leftLandmarkData);
+        drawLines(leftLandmarkData, leftEndpoints);
+
+        // Send MIDI values for the left hand
+        sendControlChange(0, leftLandmarkData[4].y * width, 0, width);
+        sendControlChange(1, leftLandmarkData[12].y * width, 0, width);
+        sendControlChange(2, leftLandmarkData[19].y * width, 0, width);
+      }
+
+      if (rightVisible) {
+        drawHandArray(rightLandmarkData);
+        drawLines(rightLandmarkData, rightEndpoints);
+
+        // Send MIDI values for the right hand
+        sendControlChange(3, rightLandmarkData[4].y * width, 0, width);
+        sendControlChange(4, rightLandmarkData[12].y * width, 0, width);
+        sendControlChange(5, rightLandmarkData[19].y * width, 0, width);
+      }
+
+      context.fillStyle = "yellow";
+      context.strokeStyle = "yellow";
+
+      if (faceVisible) {
+        drawFaceArray(faceLandmarkData);
+
+        // Send MIDI values for the face
+        sendControlChange(6, faceLandmarkData[50].x * width, 0, width);
+        sendControlChange(7, faceLandmarkData[150].x * width, 0, width);
+      }
+      // console.log(data)
+      /*
+      if (data.hands.landmarksVisible[0]) {
+        console.log("dur dater")
+
+        for (var i = 0; i < data.hands.landmarks[0].length; i++) {
+          context.beginPath();
+          context.arc(data.landmarks[0][i].x, data.landmarks[0][i].y, 2, 0, 2 * Math.PI, false);
+          context.fillStyle = 'red';
+          context.fill();
+        }
+      }
+      */
+      window.requestAnimationFrame(draw);
+    }
+    init();
+    setTimeout(() => {startVideo()}, 3000);
+    window.requestAnimationFrame(draw);
+  </script>
+</body>
+
+</html>
