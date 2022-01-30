@@ -115,6 +115,7 @@
       return endpoints;
     }
 
+    /*
     WebMidi.enable(function (err) {
       if (err) {
         console.log("WebMidi could not be enabled.", err);
@@ -130,6 +131,7 @@
       midiEnabled = true;
       console.log("Midi activated")
     });
+    */
 
     document.body.onkeyup = function (e) {
       console.log("Starting video");
@@ -187,21 +189,10 @@
       leftEndpoints = randomizeEndpoints(22, 0, width / 2);
       rightEndpoints = randomizeEndpoints(22, width / 2, width);
 
+      /*
       for (var i = 0; i < 12; i++) {
         controlChangeMessages[i] = 0;
-      }
-    }
-
-    function sendControlChange(controlNumber, rawValue, min, max) {
-      var newValue = Math.round(rawValue.map(min, max, 0, 127));
-
-      if (controlChangeMessages[controlNumber] != newValue) {
-        controlChangeMessages[controlNumber] = newValue;
-
-        if (midiEnabled == true) {
-          midiOutput.sendControlChange(controlNumber, newValue, 1);
-        }
-      }
+      }*/
     }
 
     function drawHandArray(points) {
@@ -250,46 +241,15 @@
       if (leftVisible) {
         drawHandArray(leftLandmarkData);
         drawLines(leftLandmarkData, leftEndpoints);
-
-        // Send MIDI values for the left hand
-        sendControlChange(0, leftLandmarkData[4].y * width, 0, width);
-        sendControlChange(1, leftLandmarkData[12].y * width, 0, width);
-        sendControlChange(2, leftLandmarkData[19].y * width, 0, width);
       }
 
       if (rightVisible) {
         drawHandArray(rightLandmarkData);
         drawLines(rightLandmarkData, rightEndpoints);
-
-        // Send MIDI values for the right hand
-        sendControlChange(3, rightLandmarkData[4].y * width, 0, width);
-        sendControlChange(4, rightLandmarkData[12].y * width, 0, width);
-        sendControlChange(5, rightLandmarkData[19].y * width, 0, width);
       }
 
       context.fillStyle = "red";
       context.strokeStyle = "red";
-
-      if (faceVisible) {
-        drawFaceArray(faceLandmarkData);
-
-        // Send MIDI values for the face
-        sendControlChange(6, faceLandmarkData[50].x * width, 0, width);
-        sendControlChange(7, faceLandmarkData[150].x * width, 0, width);
-      }
-      // console.log(data)
-      /*
-      if (data.hands.landmarksVisible[0]) {
-        console.log("dur dater")
-
-        for (var i = 0; i < data.hands.landmarks[0].length; i++) {
-          context.beginPath();
-          context.arc(data.landmarks[0][i].x, data.landmarks[0][i].y, 2, 0, 2 * Math.PI, false);
-          context.fillStyle = 'red';
-          context.fill();
-        }
-      }
-      */
       window.requestAnimationFrame(draw);
     }
     init();
