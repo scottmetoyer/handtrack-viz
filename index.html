@@ -29,36 +29,14 @@
     var width = screen.width;
     var height = screen.height;
     var visible = false;
-    var midiEnabled = false;
-    var midiOutput;
-    var midiInput;
+    var canvasDirection = -1;
 
     var leftVisible = false;
     var rightVisible = false;
-    var faceVisible = false;
-
     var leftLandmarkData = [];
     var rightLandmarkData = [];
-    var faceLandmarkData = [];
-
     var leftEndpoints = [];
     var rightEndpoints = [];
-    var faceEndpoints = [];
-
-    // Control change values
-    var controlChangeMessages = [];
-
-    // Helper map function to constain input values to valid MIDI CC ranges
-    Number.prototype.map = function (in_min, in_max, out_min, out_max) {
-      var value = this;
-      if (this < in_min) {
-        value = in_min;
-      }
-      if (this > in_max) {
-        value = in_max;
-      }
-      return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-    }
 
     const handsfree = new Handsfree({
       hands: {
@@ -72,20 +50,14 @@
         // Higher values are more robust at the expense of higher latency
         minTrackingConfidence: 0.5
       }
-      /*,
-      facemesh: {
-        enabled: true,
-        maxNumFaces: 1,
-
-        // Minimum confidence [0 - 1] for a face to be considered detected
-        minDetectionConfidence: 0.5,
-
-        // Minimum confidence [0 - 1] for the landmark tracker to be considered detected
-        // Higher values are more robust at the expense of higher latency
-        minTrackingConfidence: 0.5
-      }*/
     });
-    handsfree.start();
+    handsfree.start(startVideo);
+
+    function flipGraphics() {
+      canvasDirection == -1 ? canvasDirection = 1 : canvasDirection = -1;
+      canvas.style.transform = "scaleX(" + canvasDirection + ")";
+      canvas.style.webkitTransform = "scaleX(" + canvasDirection + ")";
+    }
 
     function startVideo() {
       var video = document.querySelector("#video");
@@ -115,29 +87,10 @@
       return endpoints;
     }
 
-    /*
-    WebMidi.enable(function (err) {
-      if (err) {
-        console.log("WebMidi could not be enabled.", err);
-      }
-
-      // Enumerate outputs
-      console.log(WebMidi.outputs);
-
-      // var output = WebMidi.getOutputById("123456789");
-      // var output = WebMidi.getOutputByName("CV-8");
-      midiOutput = WebMidi.getOutputByName("IAC Driver Bus 1");
-
-      midiEnabled = true;
-      console.log("Midi activated")
-    });
-    */
-
     document.body.onkeyup = function (e) {
-      console.log("Starting video");
-
-      if (e.keyCode == 32) {
-        startVideo();
+      // F key, flip the graphics
+      if (e.keyCode == 70) {
+        flipGraphics();
       }
     }
 
@@ -165,20 +118,9 @@
           rightLandmarkData = [];
         }
       }
-
-      /*
-      if (data.facemesh && data.facemesh.multiFaceLandmarks) {
-        faceVisible = true;
-        faceLandmarkData = data.facemesh.multiFaceLandmarks[0];
-      } else {
-        faceVisible = false;
-      }
-      */
     })
 
     function init() {
-      //canvas.style.width = width + "px";
-      //canvas.style.height = height + "px";
       var scale = window.devicePixelRatio;
       canvas.width = width * scale;
       canvas.height = height * scale;
@@ -188,11 +130,6 @@
 
       leftEndpoints = randomizeEndpoints(22, 0, width / 2);
       rightEndpoints = randomizeEndpoints(22, width / 2, width);
-
-      /*
-      for (var i = 0; i < 12; i++) {
-        controlChangeMessages[i] = 0;
-      }*/
     }
 
     function drawHandArray(points) {
@@ -202,18 +139,6 @@
 
         context.beginPath();
         context.arc(x, y, 4, 0, 2 * Math.PI, false);
-        context.fill();
-        context.stroke();
-      }
-    }
-
-    function drawFaceArray(points) {
-      for (var i = 0; i < points.length; i++) {
-        x = width - (points[i].x * width);
-        y = points[i].y * height;
-
-        context.beginPath();
-        context.arc(x, y, 1, 0, 2 * Math.PI, false);
         context.fill();
         context.stroke();
       }
@@ -253,7 +178,6 @@
       window.requestAnimationFrame(draw);
     }
     init();
-    setTimeout(() => {startVideo()}, 3000);
     window.requestAnimationFrame(draw);
   </script>
 </body>

@@ -288,6 +288,9 @@ canvas {
   left: 0;
   right: 0;
   /* horizontal center */
+
+  -webkit-transform: scaleX(-1);
+  transform: scaleX(-1);
 }
 
 video {
@@ -305,8 +308,7 @@ video {
   left: 0;
   right: 0;
   /* horizontal center */
-  -webkit-transform: scaleX(-1);
-  transform: scaleX(-1);
+
 }
 
 #leftTarget,#rightTarget {
